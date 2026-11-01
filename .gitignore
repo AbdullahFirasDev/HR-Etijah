@@ -1,0 +1,41 @@
+# Nuxt
+.output
+.data
+.nuxt
+.nuxt-typecheck
+.nitro
+.cache
+dist
+
+# Node
+node_modules
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Local env files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Supabase local state
+supabase/.branches
+supabase/.temp
+
+# Tests
+coverage
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# Local pre-change backups (may contain .env copies)
+.backups/

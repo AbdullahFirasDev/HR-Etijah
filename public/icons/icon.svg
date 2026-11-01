@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1679c8"/>
+      <stop offset="1" stop-color="#06528f"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <!-- direction arrow (اتجاه = direction) forming a location pin -->
+  <path d="M256 92c-70.7 0-128 57.3-128 128 0 92 128 200 128 200s128-108 128-200c0-70.7-57.3-128-128-128z" fill="#fff"/>
+  <!-- check mark: verified attendance -->
+  <path d="M206 222l36 36 66-74" fill="none" stroke="#0866b2" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
