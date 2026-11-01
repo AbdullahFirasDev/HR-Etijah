@@ -1,15 +1,15 @@
-import { timingSafeEqual } from 'node:crypto'
+import { cronAuthorized } from '../../lib/cron-auth'
 
 /**
- * External scheduler entry point (Vercel Cron, system cron, GitHub Actions…) for platforms
- * without long-running Nitro scheduled tasks. Requires `Authorization: Bearer <CRON_SECRET>`.
+ * External scheduler entry point for platforms without long-running Nitro scheduled tasks.
+ * Vercel Cron calls it with GET (schedule in nuxt.config.ts → nitro.vercel.config.crons);
+ * other schedulers may use POST. Requires `Authorization: Bearer <CRON_SECRET>`.
  */
 export default defineEventHandler(async (event) => {
-  const secret = serverConfig().cronSecret
-  const header = getHeader(event, 'authorization') ?? ''
-  const given = Buffer.from(header.replace(/^Bearer\s+/i, ''))
-  const expected = Buffer.from(secret)
-  if (!secret || secret.length < 24 || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+  if (event.method !== 'GET' && event.method !== 'POST') {
+    throw apiError(405, 'method_not_allowed')
+  }
+  if (!cronAuthorized(getHeader(event, 'authorization'), serverConfig().cronSecret)) {
     throw apiError(401, 'unauthorized')
   }
   return closeDays()

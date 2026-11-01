@@ -14,10 +14,18 @@ const securityHeaders = {
   // Geolocation + WebAuthn are used by this origin only.
   'Permissions-Policy':
     'geolocation=(self), publickey-credentials-get=(self), publickey-credentials-create=(self), camera=(), microphone=(), payment=(), usb=()',
-  // Fallback for non-HTML responses. HTML documents get a hash-based policy from
-  // server/plugins/csp.ts (no 'unsafe-inline' / 'unsafe-eval' for scripts).
-  'Content-Security-Policy': RESOURCE_CSP,
 }
+
+// Strict policy for everything that is not an HTML document. It is attached only to these
+// non-document paths — never to page routes — because HTML documents get a hash-based policy
+// from server/plugins/csp.ts, and on Vercel route rules become edge headers: a second policy on
+// a page would be enforced as well and block its inline scripts.
+const resourceCsp = { 'Content-Security-Policy': RESOURCE_CSP }
+
+// Vercel Cron for the housekeeping job (the Node server runs it as a Nitro scheduled task instead,
+// which Vercel does not support). Hobby allows at most one run per day; on Pro set
+// VERCEL_CRON_SCHEDULE='*/30 * * * *' in the project's build environment. Default: 00:00 Baghdad.
+const VERCEL_CRON_SCHEDULE = process.env.VERCEL_CRON_SCHEDULE || '0 21 * * *'
 
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-01',
@@ -78,6 +86,8 @@ export default defineNuxtConfig({
     clientIpHeader: '',
     // Local testing only (rejected in production): IP that stands in for loopback requests.
     devLoopbackClientIp: '',
+    // Rate-limit counters: memory (one server) | database (shared; needed on Vercel, see docs/DEPLOYMENT.md)
+    rateLimitStore: 'memory',
     // --- Jobs / notifications ---
     cronSecret: '',
     vapidPrivateKey: '',
@@ -93,7 +103,13 @@ export default defineNuxtConfig({
 
   routeRules: {
     '/**': { headers: securityHeaders },
-    '/api/**': { headers: { 'Cache-Control': 'no-store' } },
+    '/api/**': { headers: { 'Cache-Control': 'no-store', ...resourceCsp } },
+    '/_nuxt/**': { headers: resourceCsp },
+    '/_fonts/**': { headers: resourceCsp },
+    '/_i18n/**': { headers: resourceCsp },
+    '/icons/**': { headers: resourceCsp },
+    '/manifest.webmanifest': { headers: resourceCsp },
+    '/favicon.ico': { headers: resourceCsp },
     '/sw.js': { headers: { 'Cache-Control': 'no-cache', 'Content-Security-Policy': SERVICE_WORKER_CSP } },
   },
 
@@ -173,6 +189,12 @@ export default defineNuxtConfig({
     scheduledTasks: {
       // Missing check-out detection, absence detection and summary recalculation.
       '*/30 * * * *': ['attendance:close-days'],
+    },
+    // Used only by the Vercel preset (scheduled tasks above do not run there).
+    vercel: {
+      config: {
+        crons: [{ path: '/api/cron/daily', schedule: VERCEL_CRON_SCHEDULE }],
+      },
     },
   },
 

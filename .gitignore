@@ -3,9 +3,12 @@
 .data
 .nuxt
 .nuxt-typecheck
+.nuxt-vercel
 .nitro
 .cache
 dist
+# Vercel build output and CLI project link (`npm run build:vercel`, `vercel link`)
+.vercel
 
 # Node
 node_modules
@@ -25,6 +28,7 @@ logs
 .env
 .env.*
 !.env.example
+!.env.vercel.example
 
 # Supabase local state
 supabase/.branches

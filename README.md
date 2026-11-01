@@ -32,7 +32,7 @@ npx supabase db reset         # applies supabase/migrations + supabase/seed.sql 
 cp .env.example .env          # then fill in the values below
 npm run dev                   # http://localhost:3000
 ```
-wdG6d9owHA3u2oM0
+
 Minimal `.env` for local development (keys come from `supabase start` / `supabase status`):
 
 ```env
@@ -86,6 +86,12 @@ or use Chrome DevTools → Sensors to simulate a location. The seed allows one e
 Loopback is never allowed: `http://localhost` is seen as `127.0.0.1`/`::1`, not the office IP. To test
 attendance locally set `NUXT_DEV_LOOPBACK_CLIENT_IP` to an allowed office IP (development/test only — see
 [docs/SECURITY.md](docs/SECURITY.md#localhost-vs-the-office-network-local-testing)).
+
+## Deploying
+
+Node server (Docker/VM) or Vercel — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). For Vercel, the variables
+are listed in [.env.vercel.example](.env.vercel.example); check a build locally with
+`npm run build:vercel && npm run verify:vercel` before deploying.
 
 ## Commands
 

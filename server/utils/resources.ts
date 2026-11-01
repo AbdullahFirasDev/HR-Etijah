@@ -14,7 +14,7 @@ import {
   officeSchema,
   shiftSchema,
 } from '#shared/schemas'
-import { canonicalCidr, isLoopbackCidr } from '../lib/ip'
+import { canonicalCidr, isLoopbackCidr, isPublicCidr } from '../lib/ip'
 
 export interface ResourceDef {
   table: string
@@ -70,6 +70,11 @@ export const RESOURCES: Record<string, ResourceDef> = {
       // NUXT_DEV_LOOPBACK_CLIENT_IP instead).
       if (isLoopbackCidr(cidr)) {
         throw apiError(422, 'loopback_network')
+      }
+      // In production client IPs are always public (server/lib/ip.ts), so an active private or
+      // reserved range could never match — and would only matter if that guard were bypassed.
+      if (v.is_active !== false && serverConfig().appEnv === 'production' && !isPublicCidr(cidr)) {
+        throw apiError(422, 'non_public_network')
       }
       return { ...v, cidr }
     },

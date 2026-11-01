@@ -46,9 +46,41 @@ built-in test that shows the IP the server sees for your browser.
 | Node server directly on the internet | `none` (socket address) |
 | Behind your own nginx / Caddy / load balancer | `xff` + `NUXT_TRUSTED_PROXY_CIDRS` = the proxy addresses. The server walks `X-Forwarded-For` right-to-left and returns the first address that is not a trusted proxy. |
 | Behind Cloudflare | `header`, `NUXT_CLIENT_IP_HEADER=cf-connecting-ip`, and `NUXT_TRUSTED_PROXY_CIDRS` = Cloudflare's published ranges (or lock the origin so only Cloudflare can reach it) |
-| Vercel | `header`, `NUXT_CLIENT_IP_HEADER=x-real-ip` (set by the platform) |
+| Vercel | `vercel` (see [Vercel](#vercel) below) |
 
 Never enable `xff`/`header` without making sure clients cannot reach the app except through that proxy.
+
+**Production accepts only public client IPs.** Whatever the mode, in production a resolved client IP that
+is not public unicast — loopback, private LAN (`10/8`, `172.16/12`, `192.168/16`), link-local, CGNAT,
+IPv6 ULA, documentation ranges — is treated as *unknown* (`network_unknown`, attendance rejected). Such an
+address can never be the office's public IP, so an allowlist entry for it can never let anyone in. The admin
+API also refuses to activate non-public ranges in production (`non_public_network`).
+
+### Vercel
+
+A Vercel function's TCP peer is Vercel's own proxy, so the client address must come from a header — one
+that only Vercel's edge can set. Vercel documents that it **overwrites `X-Forwarded-For` with the client's
+public IP and does not forward client-supplied values ("to prevent IP spoofing")**, and that
+`x-real-ip` and `x-vercel-forwarded-for` carry the same address (the latter even if a proxy sits in front;
+a custom forwarded IP is an Enterprise "trusted proxy" feature). With `NUXT_TRUST_PROXY_MODE=vercel`:
+
+- the client IP is the single address in `x-vercel-forwarded-for`; `x-real-ip` and `x-forwarded-for`, when
+  present, must hold the same single address — any disagreement, list or malformed value makes the client IP
+  unknown (fail closed), as does a missing header;
+- the mode works only when the server runs on Vercel (`VERCEL=1`); anywhere else these headers are
+  client-controlled, so the client IP is unknown and production refuses to start with this mode;
+- on Vercel, production refuses to start with any other mode (the proxy's address would be used);
+- the production public-IP rule above still applies.
+
+**What has and has not been verified.** The decisions above are covered by unit tests and were exercised
+on the built Vercel function with simulated edge headers. That Vercel's edge really overwrites the headers
+for this project is Vercel's documented behaviour but can only be confirmed on a deployment — follow
+[DEPLOYMENT.md → Verify the client IP](DEPLOYMENT.md#verify-the-client-ip-must-be-done-on-a-deployment)
+before going live. Do not place another proxy/CDN in front of Vercel.
+
+**IPv6.** Vercel's domains currently publish no AAAA records, so clients connect over IPv4 and the office
+appears as its IPv4 address. IPv6 client addresses are handled (and matched against IPv6 allowlist entries)
+should that change.
 
 ### Localhost vs the office network (local testing)
 

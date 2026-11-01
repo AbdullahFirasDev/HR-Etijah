@@ -8,8 +8,16 @@
  *   xff    — the socket peer must be a trusted proxy; walk X-Forwarded-For right-to-left,
  *            skipping trusted proxies; the first untrusted hop is the client
  *   header — a single-IP header written by the edge platform (e.g. cf-connecting-ip,
- *            x-real-ip set by nginx, x-vercel-forwarded-for). If trusted proxies are configured
- *            the socket peer must match one of them.
+ *            x-real-ip set by nginx). If trusted proxies are configured the socket peer must
+ *            match one of them.
+ *   vercel — Vercel's edge overwrites x-vercel-forwarded-for / x-real-ip / x-forwarded-for with
+ *            the connecting client's address (documented anti-spoofing; the function's own peer
+ *            is Vercel's proxy). Honoured only when the server actually runs on Vercel; the three
+ *            must agree on one address, otherwise the client IP is unknown (attendance rejected).
+ *
+ * In production a client IP that is not a public unicast address (loopback, private LAN,
+ * link-local, CGNAT, documentation ranges…) is treated as unknown: it cannot be the office's
+ * public IP, so it is never matched against the allowlist.
  *
  * A request from this machine (loopback peer) never passes through the company's NAT gateway, so
  * it cannot carry the office's public IP. For local testing only, `loopbackOverride` (the
@@ -18,7 +26,7 @@
  */
 import ipaddr from 'ipaddr.js'
 
-export type TrustProxyMode = 'none' | 'xff' | 'header'
+export type TrustProxyMode = 'none' | 'xff' | 'header' | 'vercel'
 
 export interface ClientIpOptions {
   mode: TrustProxyMode
@@ -28,7 +36,14 @@ export interface ClientIpOptions {
   peerSource?: string
   /** Development/test only: the address that stands in for a loopback peer (see above). */
   loopbackOverride?: string | null
+  /** The server runs on Vercel (VERCEL=1): required for mode 'vercel'. */
+  onVercel?: boolean
+  /** Production: only a public unicast client IP counts (see above). */
+  publicOnly?: boolean
 }
+
+/** Headers Vercel's edge sets to the client address; the first is authoritative. */
+export const VERCEL_IP_HEADERS = ['x-vercel-forwarded-for', 'x-real-ip', 'x-forwarded-for'] as const
 
 export interface ResolvedIp {
   ip: string | null
@@ -133,6 +148,17 @@ export function isLoopbackIp(ip: string | null | undefined): boolean {
   return toAddr(ip)?.range() === 'loopback'
 }
 
+/** A globally routable unicast address — the only kind the office's public IP can be. */
+export function isPublicIp(ip: string | null | undefined): boolean {
+  return toAddr(ip)?.range() === 'unicast'
+}
+
+/** A network whose base address is public unicast (no private, loopback, link-local, 0.0.0.0/0…). */
+export function isPublicCidr(cidr: string): boolean {
+  const parsed = parseCidr(cidr)
+  return !!parsed && parsed[0].range() === 'unicast'
+}
+
 /** A network inside the loopback range (e.g. 127.0.0.1/32, 127.0.0.0/8, ::1/128). */
 export function isLoopbackCidr(cidr: string): boolean {
   const parsed = parseCidr(cidr)
@@ -152,14 +178,37 @@ export function resolveClientIp(
   headers: Record<string, string | string[] | undefined>,
   opts: ClientIpOptions,
 ): ResolvedIp {
-  const resolved = observedClientIp(remoteAddress, headers, opts)
+  let resolved = observedClientIp(remoteAddress, headers, opts)
   const peerSource = opts.peerSource ?? 'socket'
   const override = normalizeIp(opts.loopbackOverride)
   // Only a direct loopback connection (no proxy header was trusted) is substituted.
   if (override && resolved.source === peerSource && isLoopbackIp(resolved.ip)) {
-    return { ip: override, source: `${peerSource}+loopback-override` }
+    resolved = { ip: override, source: `${peerSource}+loopback-override` }
+  }
+  if (opts.publicOnly && resolved.ip && !isPublicIp(resolved.ip)) {
+    return { ip: null, source: `${resolved.source}+non-public` }
   }
   return resolved
+}
+
+function vercelClientIp(headers: Record<string, string | string[] | undefined>, onVercel: boolean): ResolvedIp {
+  if (!onVercel) {
+    // Off Vercel nothing overwrites these headers: anyone could set them.
+    return { ip: null, source: 'vercel-unavailable' }
+  }
+  let ip: string | null = null
+  for (const name of VERCEL_IP_HEADERS) {
+    const values = headerValues(headers, name).map(v => v.trim()).filter(Boolean)
+    if (values.length === 0 && name !== VERCEL_IP_HEADERS[0]) {
+      continue
+    }
+    const value = values.length === 1 ? normalizeIp(values[0]) : null
+    if (!value || (ip && value !== ip)) {
+      return { ip: null, source: `vercel-invalid:${name}` }
+    }
+    ip = value
+  }
+  return { ip, source: 'vercel' }
 }
 
 function observedClientIp(
@@ -171,6 +220,10 @@ function observedClientIp(
   const trusted = opts.trustedProxies
   const chain = headerValues(headers, 'x-forwarded-for').map(h => h.trim()).filter(Boolean)
   const peerSource = opts.peerSource ?? 'socket'
+
+  if (opts.mode === 'vercel') {
+    return vercelClientIp(headers, !!opts.onVercel)
+  }
 
   if (opts.mode === 'xff') {
     if (!remote || !ipInAny(remote, trusted)) {

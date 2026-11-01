@@ -5,11 +5,13 @@
   "type": "module",
   "description": "Etijah HR — employee attendance & time tracking PWA (Nuxt 4 + Supabase)",
   "engines": {
-    "node": ">=22.12.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "verify:vercel": "node scripts/verify-vercel-output.mjs",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "node scripts/typecheck.mjs",
@@ -32,6 +34,7 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "@supabase/supabase-js": "^2.118.0",
+    "@vercel/functions": "^3.10.5",
     "@vite-pwa/nuxt": "^1.1.1",
     "date-fns": "^4.4.0",
     "echarts": "^6.1.0",

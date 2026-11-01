@@ -15,7 +15,8 @@ export default defineEventHandler(async (event) => {
     return
   }
   const config = serverConfig() // a misconfigured server answers 500 server_misconfigured
-  await rateLimit(event, 'api', clientIp(event) ?? 'unknown', 600, 60)
+  // Coarse per-instance flood guard; endpoint limits (login, attendance…) use the shared store.
+  await rateLimit(event, 'api', clientIp(event) ?? 'unknown', 600, 60, { shared: false })
 
   if (SAFE_METHODS.has(event.method) || path.startsWith('/api/cron/')) {
     return

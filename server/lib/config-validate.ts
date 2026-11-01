@@ -11,6 +11,8 @@ import { normalizeOrigin } from './origin'
 export type AppEnv = 'development' | 'test' | 'production'
 
 export interface RawServerConfig {
+  /** Running on Vercel (VERCEL=1). */
+  onVercel: boolean
   supabaseUrl: string
   supabaseAnonKey: string
   supabaseServiceRoleKey: string
@@ -24,6 +26,7 @@ export interface RawServerConfig {
   trustedProxyCidrs: string[]
   clientIpHeader: string
   devLoopbackClientIp: string
+  rateLimitStore: string
   cronSecret: string
   vapidPublicKey: string
   vapidPrivateKey: string
@@ -63,6 +66,17 @@ export function supabaseKeyKind(key: string): 'anon' | 'service_role' | 'publish
     }
   }
   return 'other'
+}
+
+/**
+ * Public suffixes of hosting platforms: browsers refuse them as a WebAuthn RP ID (the RP ID must
+ * be the full app host there, e.g. etijah-hr.vercel.app, or the company's own domain).
+ */
+const PLATFORM_SUFFIXES = new Set(['vercel.app', 'now.sh', 'netlify.app', 'pages.dev', 'github.io', 'herokuapp.com', 'onrender.com', 'fly.dev', 'web.app', 'firebaseapp.com'])
+
+export function isPublicSuffixRpId(rpId: string): boolean {
+  const id = rpId.trim().toLowerCase()
+  return PLATFORM_SUFFIXES.has(id) || (!id.includes('.') && id !== 'localhost')
 }
 
 /** WebAuthn requires the RP ID to equal, or be a registrable suffix of, the origin's host. */
@@ -140,6 +154,9 @@ export function validateServerConfig(c: RawServerConfig, env: AppEnv): ConfigRep
   if (!c.webauthnRpId) {
     err('NUXT_WEBAUTHN_RP_ID', 'is not set')
   }
+  else if (isPublicSuffixRpId(c.webauthnRpId)) {
+    err('NUXT_WEBAUTHN_RP_ID', 'is a public suffix that browsers refuse; use the full app host (e.g. etijah-hr.vercel.app) or your own domain')
+  }
   else {
     for (const o of origins) {
       if (!rpIdMatchesOrigin(c.webauthnRpId, o)) {
@@ -157,7 +174,11 @@ export function validateServerConfig(c: RawServerConfig, env: AppEnv): ConfigRep
   }
 
   // --- Client IP / proxies ------------------------------------------------------------------
-  if (!['none', 'xff', 'header'].includes(c.trustProxyMode)) err('NUXT_TRUST_PROXY_MODE', 'must be none, xff or header')
+  if (!['none', 'xff', 'header', 'vercel'].includes(c.trustProxyMode)) err('NUXT_TRUST_PROXY_MODE', 'must be none, xff, header or vercel')
+  // On Vercel the TCP peer is Vercel's proxy, and only Vercel's edge overwrites its IP headers.
+  const report = prod ? err : warn
+  if (c.onVercel && c.trustProxyMode !== 'vercel') report('NUXT_TRUST_PROXY_MODE', 'must be vercel when running on Vercel (otherwise the client IP would be the platform proxy and every attendance attempt is rejected)')
+  if (!c.onVercel && c.trustProxyMode === 'vercel') report('NUXT_TRUST_PROXY_MODE', 'is vercel but the server is not running on Vercel (VERCEL=1 missing): the client IP is unknown and attendance is rejected')
   if (c.trustedProxyCidrs.some(x => !isValidCidr(x))) err('NUXT_TRUSTED_PROXY_CIDRS', 'contains an invalid IP/CIDR')
   if (c.trustProxyMode === 'xff' && c.trustedProxyCidrs.length === 0) err('NUXT_TRUSTED_PROXY_CIDRS', 'is required when NUXT_TRUST_PROXY_MODE=xff')
   if (c.trustProxyMode === 'header' && !c.clientIpHeader) err('NUXT_CLIENT_IP_HEADER', 'is required when NUXT_TRUST_PROXY_MODE=header')
@@ -170,10 +191,15 @@ export function validateServerConfig(c: RawServerConfig, env: AppEnv): ConfigRep
     else warn('NUXT_DEV_LOOPBACK_CLIENT_IP', 'is set: requests from this machine (loopback) are network-checked as that address, which must still be in the company IP allowlist. Local testing only')
   }
 
+  // --- Rate limiting ------------------------------------------------------------------------
+  if (!['memory', 'database'].includes(c.rateLimitStore)) err('NUXT_RATE_LIMIT_STORE', 'must be memory or database')
+  if (c.onVercel && c.rateLimitStore !== 'database') report('NUXT_RATE_LIMIT_STORE', 'must be database on Vercel: per-instance memory counters do not hold login and attendance limits across serverless instances')
+
   // --- Optional features ---------------------------------------------------------------------
   if (c.cronSecret && c.cronSecret.length < 24) err('NUXT_CRON_SECRET', 'must be at least 24 characters when set')
   if (!!c.vapidPublicKey !== !!c.vapidPrivateKey) err('NUXT_VAPID_PRIVATE_KEY', 'and NUXT_PUBLIC_VAPID_PUBLIC_KEY must be set together')
-  if (prod && !c.cronSecret) warn('NUXT_CRON_SECRET', 'is empty: /api/cron/daily is disabled (fine if the Node server runs the scheduled task itself)')
+  if (c.onVercel && !c.cronSecret) report('CRON_SECRET', 'is required on Vercel: the housekeeping job (missing check-outs, absences, purges) runs only through Vercel Cron')
+  else if (prod && !c.cronSecret) warn('NUXT_CRON_SECRET', 'is empty: /api/cron/daily is disabled (fine if the Node server runs the scheduled task itself)')
 
   return { env, errors, warnings }
 }

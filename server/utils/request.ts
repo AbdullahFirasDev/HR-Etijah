@@ -27,6 +27,9 @@ export function clientIp(event: H3Event): string | null {
     peerSource: import.meta.dev ? 'dev-peer' : 'socket',
     // Explicit local-testing setting: never active in production (and rejected there at startup).
     loopbackOverride: effectiveLoopbackClientIp(c.appEnv, c.devLoopbackClientIp),
+    onVercel: c.onVercel,
+    // Production: loopback / private / link-local addresses can never be the office public IP.
+    publicOnly: c.appEnv === 'production',
   })
   event.context.clientIp = ip
   event.context.clientIpSource = source
@@ -45,9 +48,12 @@ export function logNetworkDecision(event: H3Event, d: Pick<NetworkDecision, 'sta
   }))
 }
 
-/** Whether the TCP peer is one of the configured trusted reverse proxies. */
+/** Whether the TCP peer is one of the configured trusted reverse proxies (or Vercel's edge). */
 export function fromTrustedProxy(event: H3Event): boolean {
   const c = serverConfig()
+  if (c.trustProxyMode === 'vercel') {
+    return c.onVercel
+  }
   if (c.trustProxyMode === 'none') {
     return false
   }

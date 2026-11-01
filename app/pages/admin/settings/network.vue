@@ -55,6 +55,9 @@ async function copyIp() {
             <p class="text-xs text-muted">
               {{ t('network.source') }}: <code dir="ltr">{{ test.source }}</code> · {{ t('network.mode') }}: <code dir="ltr">{{ test.trustProxyMode }}</code>
             </p>
+            <p v-if="test.vercelHeaders" class="text-xs text-muted" dir="ltr">
+              <span v-for="(v, k) in test.vercelHeaders" :key="k" class="me-2"><code>{{ k }}: {{ v ?? '—' }}</code></span>
+            </p>
             <UAlert v-if="test.loopbackOverride" color="info" variant="subtle" icon="i-lucide-flask-conical" :title="t('network.overrideTitle')" :description="t('network.overrideHelp', { ip: test.ip })" />
             <UAlert v-else-if="test.loopbackPeer" color="warning" variant="subtle" icon="i-lucide-monitor" :title="t('network.loopbackTitle')" :description="test.allowed ? t('network.loopbackAllowedHelp', { label: test.matches.map((m: any) => m.label).join(', ') }) : t('network.loopbackHelp')" />
             <UAlert :color="test.allowed ? 'success' : 'error'" variant="subtle" :icon="test.allowed ? 'i-lucide-check' : 'i-lucide-x'" :title="test.allowed ? t('network.allowed', { label: test.matches.map((m: any) => m.label).join(', ') }) : t('network.notAllowed')" />

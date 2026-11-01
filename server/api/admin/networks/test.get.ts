@@ -1,4 +1,4 @@
-import { ipInCidr, isLoopbackIp } from '../../../lib/ip'
+import { ipInCidr, isLoopbackIp, VERCEL_IP_HEADERS } from '../../../lib/ip'
 
 /** Shows the IP the server observes for THIS request and which allowed networks match it. */
 export default defineEventHandler(async (event) => {
@@ -18,6 +18,9 @@ export default defineEventHandler(async (event) => {
     loopbackOverride: source.endsWith('+loopback-override'),
     socketAddress: event.node.req.socket?.remoteAddress ?? null,
     trustProxyMode: c.trustProxyMode,
+    onVercel: c.onVercel,
+    // What Vercel's edge sent (for verifying a deployment from the office network).
+    vercelHeaders: c.trustProxyMode === 'vercel' ? Object.fromEntries(VERCEL_IP_HEADERS.map(h => [h, getHeader(event, h) ?? null])) : null,
     trustedProxies: c.trustedProxyCidrs,
     forwardedFor: getHeader(event, 'x-forwarded-for') ?? null,
     matches,

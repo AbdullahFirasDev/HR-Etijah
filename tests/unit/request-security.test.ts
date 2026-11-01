@@ -95,6 +95,7 @@ describe('hash-based CSP', () => {
 describe('server configuration validation', () => {
   const jwt = (role: string) => `x.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.y`
   const good: RawServerConfig = {
+    onVercel: false,
     supabaseUrl: 'https://abc.supabase.co',
     supabaseAnonKey: jwt('anon'),
     supabaseServiceRoleKey: jwt('service_role'),
@@ -108,6 +109,7 @@ describe('server configuration validation', () => {
     trustedProxyCidrs: [],
     clientIpHeader: '',
     devLoopbackClientIp: '',
+    rateLimitStore: 'memory',
     cronSecret: '',
     vapidPublicKey: '',
     vapidPrivateKey: '',

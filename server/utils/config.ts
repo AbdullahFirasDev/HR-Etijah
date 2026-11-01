@@ -3,6 +3,8 @@ import { resolveAppEnv, validateServerConfig, type AppEnv, type ConfigReport } f
 
 export interface ServerConfig {
   appEnv: AppEnv
+  /** Running on Vercel (system variable VERCEL=1, set at build and run time). */
+  onVercel: boolean
   supabaseUrl: string
   supabaseAnonKey: string
   supabaseServiceRoleKey: string
@@ -18,6 +20,7 @@ export interface ServerConfig {
   trustedProxyCidrs: string[]
   clientIpHeader: string
   devLoopbackClientIp: string
+  rateLimitStore: 'memory' | 'database'
   cronSecret: string
   vapidPublicKey: string
   vapidPrivateKey: string
@@ -34,6 +37,7 @@ function load(): { config: ServerConfig, report: ConfigReport } {
   const rc = useRuntimeConfig()
   const config: ServerConfig = {
     appEnv: resolveAppEnv(String(rc.appEnv ?? ''), import.meta.dev),
+    onVercel: process.env.VERCEL === '1',
     supabaseUrl: String(rc.supabaseUrl || '').trim().replace(/\/$/, ''),
     supabaseAnonKey: String(rc.supabaseAnonKey || '').trim(),
     supabaseServiceRoleKey: String(rc.supabaseServiceRoleKey || '').trim(),
@@ -49,7 +53,9 @@ function load(): { config: ServerConfig, report: ConfigReport } {
     trustedProxyCidrs: list(rc.trustedProxyCidrs),
     clientIpHeader: String(rc.clientIpHeader || '').trim(),
     devLoopbackClientIp: String(rc.devLoopbackClientIp || '').trim(),
-    cronSecret: String(rc.cronSecret || '').trim(),
+    rateLimitStore: String(rc.rateLimitStore || 'memory').trim() as ServerConfig['rateLimitStore'],
+    // Vercel Cron sends `Authorization: Bearer $CRON_SECRET`, so that name is accepted too.
+    cronSecret: String(rc.cronSecret || process.env.CRON_SECRET || '').trim(),
     vapidPublicKey: String(rc.public?.vapidPublicKey || '').trim(),
     vapidPrivateKey: String(rc.vapidPrivateKey || '').trim(),
     vapidSubject: String(rc.vapidSubject || 'mailto:admin@example.com'),
@@ -68,9 +74,14 @@ export function checkServerConfig(): ConfigReport {
     }
     if (report.errors.length) {
       console.error([
-        `[config] Server configuration is invalid (${report.env}). API requests will fail with 500 server_misconfigured until fixed:`,
+        report.env === 'production'
+          ? `[config] Server configuration is invalid (production). The server refuses to start until fixed${cached.config.onVercel ? ' (Vercel shows 500 FUNCTION_INVOCATION_FAILED)' : ''}:`
+          : `[config] Server configuration is invalid (${report.env}). API requests will fail with 500 server_misconfigured until fixed:`,
         ...report.errors.map(e => `  - ${e.setting} ${e.message}`),
-        '  See .env.example for every setting.',
+        // On Vercel the local template's values (http origins, insecure cookies…) are exactly what fails.
+        cached.config.onVercel
+          ? '  On Vercel set these in Project → Settings → Environment Variables (Production) as listed in .env.vercel.example — not the local .env values.'
+          : '  See .env.example for every setting.',
       ].join('\n'))
     }
   }

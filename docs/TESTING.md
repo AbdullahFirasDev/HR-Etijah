@@ -30,6 +30,8 @@
 | Exports | unit `export.test.ts`: Excel (RTL sheet, numeric hours, Baghdad times), PDF (both languages), bidi word ordering |
 | PWA, i18n/RTL, security headers, CSRF | e2e `smoke.spec.ts` incl. reopening offline from the service-worker cache |
 | Client IP for the allowlist: localhost (loopback) rejected, `NUXT_DEV_LOOPBACK_CLIENT_IP` maps loopback only and never in production, approved public IP accepted, unapproved IP rejected, spoofed `X-Forwarded-For` / `Forwarded` / `X-Real-IP` / `CF-Connecting-IP` / `True-Client-IP` ignored, authenticated `nuxi dev` peer hand-off, loopback ranges refused as allowed networks | unit `client-ip.test.ts`; db `attendance.test.ts` (loopback / unknown IP rejected by the database check) |
+| Vercel: client IP only from Vercel's edge headers (approved / unapproved IPv4, IPv6, IPv4-mapped, spoofed or disagreeing headers, missing headers, not on Vercel), production public-IP rule, public allowlist entries, Vercel config checks (IP mode, shared rate limits, `CRON_SECRET`, `vercel.app` RP ID), cron bearer secret | unit `vercel.test.ts`; built output: `npm run build:vercel && npm run verify:vercel` (runtime, cron, per-path edge headers — no second CSP on pages, no prerendered HTML, no secrets in bundles) |
+| Shared rate-limit counters | db `rate-limit.test.ts`: counting, window reset, invalid windows, no access for employees/anon |
 | CSRF origin rules, forwarded headers, hash-based CSP, startup config validation | unit `request-security.test.ts`; e2e: no CSP violation in the browser, inline-script hashes match the served HTML, allowed origin passes / foreign origin 403 |
 
 A mutation check was done on the RLS suite during development: weakening the `attendance_events` select

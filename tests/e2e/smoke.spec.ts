@@ -136,6 +136,19 @@ test.describe('HTTP security', () => {
   test('the service worker and non-HTML responses get their own restrictive CSP', async ({ request }) => {
     expect((await request.get('/sw.js')).headers()['content-security-policy']).toBe("default-src 'none'; script-src 'self'; connect-src 'self' https://tile.openstreetmap.org")
     expect((await request.get('/api/auth/session')).headers()['content-security-policy']).toContain("default-src 'none'")
+    for (const path of ['/manifest.webmanifest', '/favicon.ico']) {
+      expect((await request.get(path)).headers()['content-security-policy'], path).toMatch(/^default-src 'none'/)
+    }
+  })
+
+  test('HTML documents carry exactly one CSP: the hash-based document policy', async ({ request }) => {
+    // Route rules become edge headers on Vercel; a second (resource) policy on a page would block it.
+    for (const path of ['/', '/login', '/admin']) {
+      const res = await request.get(path)
+      const csp = res.headersArray().filter(h => h.name.toLowerCase() === 'content-security-policy')
+      expect(csp, path).toHaveLength(1)
+      expect(csp[0]!.value, path).toMatch(/script-src 'self' 'sha256-/)
+    }
   })
 
   test('an allowed origin passes the CSRF guard (reaches the auth layer)', async ({ request, baseURL }) => {
